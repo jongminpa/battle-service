@@ -419,7 +419,7 @@ class AIAnalysisService:
             return f"{base_guide}. 훈련장에서 100m 타겟 단발 연습 10분/일"
         elif any(sr in weapon_lower for sr in ['kar98k', 'awm', 'm24']):
             return f"{base_guide}. 다양한 거리에서 이동 타겟 연습 필요"
-        elif any(smg in weapon_lower for smin ['ump', 'vector', 'uzi']):
+        elif any(smg in weapon_lower for smg in ['ump', 'vector', 'uzi']):
             return f"{base_guide}. 근거리 추적 조준 연습 집중"
         else:
             return base_guide
