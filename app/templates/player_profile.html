@@ -156,7 +156,7 @@
                 </div>
                 
                 <div class="ai-analysis-result" id="analysis-{{ match_data.id }}">
-                    <h4>🤖 AI 매치 분석</h4>
+                    <h4>🤖 AI 매치 분석1</h4>
                     <div class="analysis-content"></div>
                 </div>
             </div>
@@ -199,6 +199,8 @@
         }
         
         async function analyzeMatch(matchId, playerId, button) {
+            console.log('[JS DEBUG] AI 분석 버튼 클릭됨', { matchId, playerId });
+            
             const analysisDiv = document.getElementById(`analysis-${matchId}`);
             const contentDiv = analysisDiv.querySelector('.analysis-content');
             
@@ -206,7 +208,10 @@
             button.textContent = '분석 중...';
             button.classList.add('loading');
             
+            console.log('[JS DEBUG] API 요청 준비 중...');
+            
             try {
+                console.log('[JS DEBUG] fetch 요청 시작...');
                 const response = await fetch(`/api/match/${matchId}/analyze?player_id=${playerId}`, {
                     method: 'POST',
                     headers: {
@@ -214,11 +219,14 @@
                     }
                 });
                 
+                console.log('[JS DEBUG] 응답 받음:', response.status, response.statusText);
+                
                 if (!response.ok) {
                     throw new Error('분석 요청 실패');
                 }
                 
                 const data = await response.json();
+                console.log('[JS DEBUG] 응답 데이터:', data);
                 
                 // 분석 결과 표시
                 contentDiv.textContent = data.analysis;
@@ -229,13 +237,14 @@
                 button.disabled = true;
                 
             } catch (error) {
-                console.error('AI 분석 오류:', error);
+                console.error('[JS DEBUG] AI 분석 오류:', error);
                 contentDiv.textContent = '분석 중 오류가 발생했습니다. 다시 시도해주세요.';
                 analysisDiv.style.display = 'block';
                 
                 // 버튼 복원
                 button.textContent = 'AI 분석';
             } finally {
+                console.log('[JS DEBUG] 요청 처리 완료');
                 button.classList.remove('loading');
             }
         }

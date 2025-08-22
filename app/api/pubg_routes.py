@@ -10,7 +10,6 @@ from typing import Dict, Any
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 pubg_service = PUBGAPIService()
-ai_service = AIAnalysisService()
 
 @router.post("/api/player/search")
 async def search_player(request: PlayerSearchRequest):
@@ -93,8 +92,10 @@ async def player_profile(request: Request, player_name: str):
 @router.post("/api/match/{match_id}/analyze")
 async def analyze_match(match_id: str, player_id: str, platform: str = "steam"):
     """매치 AI 분석 API"""
+    print(f"[API DEBUG] AI 분석 요청 받음 - Match ID: {match_id}, Player ID: {player_id}")
     try:
         # 매치 상세 정보 가져오기
+        print(f"[API DEBUG] 매치 상세 정보 가져오는 중...")
         match_details = await pubg_service.get_match_details(match_id, platform)
         
         if not match_details:
@@ -125,12 +126,16 @@ async def analyze_match(match_id: str, player_id: str, platform: str = "steam"):
             and p["attributes"]["stats"]["playerId"] != player_stats["playerId"]
         ]
         
-        # AI 분석 실행
+        # AI 분석 실행 - 매번 새로운 인스턴스 생성
+        print(f"[API DEBUG] AI 서비스 인스턴스 생성 중...")
+        ai_service = AIAnalysisService()
+        print(f"[API DEBUG] AI 분석 실행 중...")
         analysis = await ai_service.analyze_match_performance(
             player_stats=player_stats,
             teammates_stats=teammates,
             match_info=match_data["attributes"]
         )
+        print(f"[API DEBUG] AI 분석 완료: {len(analysis) if analysis else 0} 글자")
         
         return {
             "match_id": match_id,
@@ -140,6 +145,7 @@ async def analyze_match(match_id: str, player_id: str, platform: str = "steam"):
         }
         
     except Exception as e:
+        print(f"[API DEBUG] AI 분석 중 오류 발생: {str(e)}")
         raise HTTPException(status_code=500, detail=f"분석 중 오류가 발생했습니다: {str(e)}")
 
 @router.get("/api/player/{player_id}/trend-analysis")
@@ -175,7 +181,8 @@ async def get_trend_analysis(player_id: str, platform: str = "steam"):
         if not matches_data:
             raise HTTPException(status_code=404, detail="분석할 매치 데이터가 없습니다.")
         
-        # AI 트렌드 분석 실행
+        # AI 트렌드 분석 실행 - 매번 새로운 인스턴스 생성
+        ai_service = AIAnalysisService()
         trend_analysis = await ai_service.analyze_player_trends(matches_data)
         
         return {

@@ -1,4 +1,9 @@
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 import os
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
@@ -7,20 +12,40 @@ load_dotenv()
 
 class AIAnalysisService:
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")
-        if self.api_key:
-            if os.getenv("GEMINI_API_KEY"):
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel('gemini-pro')
-                self.use_gemini = True
-            else:
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        
+        print(f"[DEBUG] Gemini key: {gemini_key[:10] if gemini_key else 'None'}...")
+        print(f"[DEBUG] OpenAI key: {openai_key[:10] if openai_key else 'None'}...")
+        print(f"[DEBUG] Gemini available: {GEMINI_AVAILABLE}")
+        
+        # Gemini를 우선적으로 사용
+        if gemini_key and GEMINI_AVAILABLE:
+            print("[DEBUG] Configuring Gemini API")
+            genai.configure(api_key=gemini_key)
+            self.model = genai.GenerativeModel('gemini-pro')
+            self.use_gemini = True
+            self.api_key = gemini_key
+            print("[DEBUG] Successfully configured Gemini")
+        elif openai_key:
+            print("[DEBUG] Configuring OpenAI API")
+            try:
                 from openai import AsyncOpenAI
-                self.client = AsyncOpenAI(api_key=self.api_key)
+                self.client = AsyncOpenAI(api_key=openai_key)
                 self.use_gemini = False
+                self.api_key = openai_key
+                print("[DEBUG] Successfully configured OpenAI")
+            except ImportError:
+                self.client = None
+                self.use_gemini = False
+                self.api_key = None
+                print("[DEBUG] OpenAI import failed")
         else:
+            print("[DEBUG] No API keys available")
             self.model = None
             self.client = None
             self.use_gemini = False
+            self.api_key = None
     
     async def analyze_match_performance(self, player_stats: Dict[str, Any], teammates_stats: List[Dict[str, Any]], match_info: Dict[str, Any]) -> Optional[str]:
         """매치 성과 분석"""
@@ -35,9 +60,12 @@ class AIAnalysisService:
             prompt = self._create_analysis_prompt(analysis_data)
             
             # AI API 호출
+            print(f"[DEBUG] Using Gemini: {self.use_gemini}")
             if self.use_gemini:
+                print("[DEBUG] Calling Gemini API")
                 response = await self._call_gemini_api(prompt)
             else:
+                print("[DEBUG] Calling OpenAI API")
                 response = await self._call_openai_api(prompt)
             
             return response
