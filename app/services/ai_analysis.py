@@ -23,7 +23,7 @@ class AIAnalysisService:
         if gemini_key and GEMINI_AVAILABLE:
             print("[DEBUG] Configuring Gemini API")
             genai.configure(api_key=gemini_key)
-            # 최신 Gemini 모델 사용
+            # Gemini Flash 모델 사용 (더 경량화, 할당량 절약)
             self.model = genai.GenerativeModel('gemini-1.5-flash')
             self.use_gemini = True
             self.api_key = gemini_key
@@ -88,7 +88,11 @@ class AIAnalysisService:
                 "walk_distance": player_stats.get("walkDistance", 0) / 1000,  # km 단위
                 "weapons_acquired": player_stats.get("weaponsAcquired", 0),
                 "boosts": player_stats.get("boosts", 0),
-                "heals": player_stats.get("heals", 0)
+                "heals": player_stats.get("heals", 0),
+                "dbnos": player_stats.get("dBNOs", 0),  # 기절시킨 횟수
+                "revives": player_stats.get("revives", 0),  # 부활시킨 횟수
+                "team_kills": player_stats.get("teamKills", 0),  # 팀킬 (실수)
+                "assists": player_stats.get("assists", 0)  # 어시스트
             },
             "teammates": [
                 {
@@ -96,7 +100,10 @@ class AIAnalysisService:
                     "kills": teammate.get("attributes", {}).get("stats", {}).get("kills", 0),
                     "damage": teammate.get("attributes", {}).get("stats", {}).get("damageDealt", 0),
                     "survival_time": teammate.get("attributes", {}).get("stats", {}).get("timeSurvived", 0) / 60,
-                    "headshots": teammate.get("attributes", {}).get("stats", {}).get("headshotKills", 0)
+                    "headshots": teammate.get("attributes", {}).get("stats", {}).get("headshotKills", 0),
+                    "dbnos": teammate.get("attributes", {}).get("stats", {}).get("dBNOs", 0),
+                    "revives": teammate.get("attributes", {}).get("stats", {}).get("revives", 0),
+                    "assists": teammate.get("attributes", {}).get("stats", {}).get("assists", 0)
                 }
                 for teammate in teammates_stats
             ],
@@ -126,6 +133,9 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
 - 총 데미지: {player["damage"]:.1f}
 - 생존 시간: {player["survival_time"]:.1f}분
 - 헤드샷: {player["headshots"]}
+- 기절시킨 횟수: {player["dbnos"]}
+- 팀원 부활: {player["revives"]}회
+- 어시스트: {player["assists"]}
 - 이동 거리: {player["ride_distance"]:.1f}km (차량) + {player["walk_distance"]:.1f}km (도보)
 - 무기 획득: {player["weapons_acquired"]}개
 - 부스터 사용: {player["boosts"]}개
@@ -139,6 +149,7 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
 팀원 {i} ({teammate["name"]}):
 - 킬: {teammate["kills"]}, 데미지: {teammate["damage"]:.1f}
 - 생존시간: {teammate["survival_time"]:.1f}분, 헤드샷: {teammate["headshots"]}
+- 기절시킨 횟수: {teammate["dbnos"]}, 부활: {teammate["revives"]}회, 어시스트: {teammate["assists"]}
 """
         
         prompt += """
@@ -146,33 +157,80 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
 ## 분석 요청
 다음 관점에서 상세히 분석해주세요:
 
-1. **전투 성과 분석**: 킬/데미지 효율성, 헤드샷 정확도
-2. **생존 전략 분석**: 이동 패턴, 생존 시간 대비 성과
-3. **팀워크 평가**: 팀원들과의 성과 비교 및 협력도
-4. **개선점 제안**: 구체적이고 실행 가능한 개선 방안
-5. **종합 평가**: 이번 매치의 총평 및 등급 (S, A, B, C, D)
+1. **전투 성과 분석**: 킜/데미지 효율성, 헤드샷 정확도, 기절 vs 확정킬 비율
+2. **팀워크 분석**: 부활 횟수, 어시스트 기여도, 팀원들과의 협력 수준
+3. **생존 전략 분석**: 이동 패턴, 생존 시간 대비 성과, 아이템 활용도
+4. **전술적 분석**: 교전 스타일, 포지셔닝, 상황 판단력
+5. **개선점 제안**: 구체적이고 실행 가능한 개선 방안
+6. **종합 평가**: 이번 매치의 총평 및 등급 (S, A, B, C, D)
 
 한국어로 친근하고 구체적인 조언을 제공해주세요. 각 섹션을 명확히 구분하여 작성해주세요.
 """
         
         return prompt
     
+    async def _call_ollama_api(self, prompt: str) -> str:
+        """Ollama 로컬 AI 호출"""
+        import httpx
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "tinyllama",
+                    "prompt": prompt,
+                    "stream": False
+                }
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                result = data.get("response", "")
+                if result.strip():
+                    return result
+                else:
+                    raise Exception("Empty response from Ollama")
+            else:
+                raise Exception(f"Ollama API returned status {response.status_code}")
+
     async def _call_gemini_api(self, prompt: str) -> str:
         """Gemini API 호출"""
         try:
-            # Gemini는 동기식 API이므로 비동기 래퍼 사용
+            # 먼저 로컬 Ollama 시도
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    test_response = await client.get("http://localhost:11434/api/tags")
+                    if test_response.status_code == 200:
+                        return await self._call_ollama_api(prompt)
+            except:
+                pass  # Ollama 없으면 Gemini 사용
+            
+            # Gemini 사용
             import asyncio
             
             def generate_content():
                 response = self.model.generate_content(prompt)
                 return response.text
             
-            # 동기 함수를 비동기로 실행
             response = await asyncio.get_event_loop().run_in_executor(None, generate_content)
             return response.strip()
             
         except Exception as e:
-            return f"Gemini API 호출 실패: {str(e)}"
+            error_msg = str(e)
+            if "429" in error_msg or "quota" in error_msg.lower():
+                return """
+🚫 일일 AI 분석 할당량을 초과했습니다.
+
+📊 기본 분석:
+이 매치에서는 게임 통계를 통해 기본적인 성과를 확인할 수 있습니다.
+- 순위, 킬 수, 데미지, 생존 시간 등을 참고하여 플레이를 개선해보세요.
+- 내일 다시 상세한 AI 분석을 받아보실 수 있습니다.
+
+💡 팁: 할당량 절약을 위해 가장 중요한 매치만 분석해보세요!
+"""
+            else:
+                return f"Gemini API 호출 실패: {error_msg}"
     
     async def _call_openai_api(self, prompt: str) -> str:
         """OpenAI API 호출"""
@@ -225,35 +283,82 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
         # 기본 통계 계산
         total_kills = sum(match.get("kills", 0) for match in matches_data)
         total_damage = sum(match.get("damage", 0) for match in matches_data)
+        total_dbnos = sum(match.get("dbnos", 0) for match in matches_data)
+        total_revives = sum(match.get("revives", 0) for match in matches_data)
+        total_assists = sum(match.get("assists", 0) for match in matches_data)
+        total_headshots = sum(match.get("headshots", 0) for match in matches_data)
         avg_rank = sum(match.get("rank", 100) for match in matches_data) / total_matches
         
         return {
             "total_matches": total_matches,
             "avg_kills": total_kills / total_matches,
             "avg_damage": total_damage / total_matches,
+            "avg_dbnos": total_dbnos / total_matches,
+            "avg_revives": total_revives / total_matches,
+            "avg_assists": total_assists / total_matches,
+            "avg_headshots": total_headshots / total_matches,
             "avg_rank": avg_rank,
             "kill_trend": [match.get("kills", 0) for match in matches_data[-10:]],  # 최근 10경기
-            "rank_trend": [match.get("rank", 100) for match in matches_data[-10:]]
+            "rank_trend": [match.get("rank", 100) for match in matches_data[-10:]],
+            "dbnos_trend": [match.get("dbnos", 0) for match in matches_data[-10:]],
+            "revives_trend": [match.get("revives", 0) for match in matches_data[-10:]]
         }
     
     def _create_trend_analysis_prompt(self, trend_data: Dict[str, Any]) -> str:
         """트렌드 분석 프롬프트 생성"""
         return f"""
-PUBG 플레이어의 최근 {trend_data["total_matches"]}경기 트렌드를 분석해주세요.
+PUBG 플레이어의 최근 {trend_data["total_matches"]}경기 종합 성과 분석을 수행해주세요.
 
-## 전체 통계
-- 평균 킬: {trend_data["avg_kills"]:.1f}
-- 평균 데미지: {trend_data["avg_damage"]:.1f}
+## 📊 전체 통계
+- 총 경기 수: {trend_data["total_matches"]}경기
+- 평균 킬 수: {trend_data["avg_kills"]:.1f}킬
+- 평균 데미지: {trend_data["avg_damage"]:.0f}
 - 평균 순위: {trend_data["avg_rank"]:.1f}위
+- 평균 기절시킨 횟수: {trend_data["avg_dbnos"]:.1f}
+- 평균 팀원 부활: {trend_data["avg_revives"]:.1f}회
+- 평균 어시스트: {trend_data["avg_assists"]:.1f}
+- 평균 헤드샷: {trend_data["avg_headshots"]:.1f}
 
-## 최근 추이
-- 킬 추이: {trend_data["kill_trend"]}
-- 순위 추이: {trend_data["rank_trend"]}
+## 📈 최근 10경기 추이
+- 킬 수 변화: {trend_data["kill_trend"]}
+- 순위 변화: {trend_data["rank_trend"]}
+- 기절시킨 횟수: {trend_data["dbnos_trend"]}
+- 팀원 부활 횟수: {trend_data["revives_trend"]}
 
-다음 관점에서 분석해주세요:
-1. 성과 향상/하락 패턴
-2. 일관성 평가
-3. 장기적 개선 방향 제안
+## 🎯 상세 분석 요청
 
-한국어로 간결하게 작성해주세요.
+다음 관점에서 종합적으로 분석하고 구체적인 개선 방안을 제시해주세요:
+
+### 1. 성과 트렌드 분석
+- 최근 성과가 향상되고 있는지, 하락하고 있는지
+- 킬과 순위의 상관관계 분석
+- 기절 vs 확정킬 효율성 분석
+- 일관성 있는 플레이를 하고 있는지 평가
+
+### 2. 팀워크 및 협력 분석
+- 팀원 부활 패턴과 팀워크 수준
+- 어시스트 기여도와 협력 플레이 능력
+- 개인 성과 vs 팀 기여도 균형
+
+### 3. 강점과 약점 파악
+- 현재 플레이 스타일의 강점
+- 개선이 필요한 약점
+- 다른 플레이어 대비 상대적 위치
+
+### 4. 구체적 개선 전략
+- 단기적 개선 목표 (1-2주)
+- 중장기적 발전 방향 (1-2개월)
+- 실행 가능한 구체적 액션 플랜
+
+### 5. 플레이 스타일 추천
+- 현재 통계에 맞는 최적 플레이 스타일
+- 권장 게임 모드나 전략
+- 피해야 할 플레이 패턴
+
+### 6. 목표 설정
+- 다음 10경기 목표
+- 달성 가능한 현실적 목표 수치
+
+친근하고 동기부여가 되는 톤으로, 실용적인 조언을 중심으로 한국어로 작성해주세요.
+각 섹션을 명확히 구분하고, 구체적인 수치와 예시를 포함해주세요.
 """

@@ -176,7 +176,11 @@ async def get_trend_analysis(player_id: str, platform: str = "steam"):
                         "kills": stats.get("kills", 0),
                         "damage": stats.get("damageDealt", 0),
                         "rank": stats.get("winPlace", 100),
-                        "survival_time": stats.get("timeSurvived", 0)
+                        "survival_time": stats.get("timeSurvived", 0),
+                        "dbnos": stats.get("dBNOs", 0),
+                        "revives": stats.get("revives", 0),
+                        "assists": stats.get("assists", 0),
+                        "headshots": stats.get("headshotKills", 0)
                     })
         
         if not matches_data:
