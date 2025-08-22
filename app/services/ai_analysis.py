@@ -196,25 +196,35 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
     async def _call_gemini_api(self, prompt: str) -> str:
         """Gemini API 호출"""
         try:
-            # 먼저 로컬 Ollama 시도
-            try:
-                import httpx
-                async with httpx.AsyncClient(timeout=2.0) as client:
-                    test_response = await client.get("http://localhost:11434/api/tags")
-                    if test_response.status_code == 200:
-                        return await self._call_ollama_api(prompt)
-            except:
-                pass  # Ollama 없으면 Gemini 사용
-            
-            # Gemini 사용
+            # 먼저 Gemini 사용
             import asyncio
             
             def generate_content():
+                print(f"[DEBUG] Gemini에게 보내는 프롬프트 길이: {len(prompt)}")
+                print(f"[DEBUG] 프롬프트 시작 부분: {prompt[:200]}...")
                 response = self.model.generate_content(prompt)
+                print(f"[DEBUG] Gemini 응답 길이: {len(response.text)}")
+                print(f"[DEBUG] Gemini 응답 시작: {response.text[:200]}...")
                 return response.text
             
             response = await asyncio.get_event_loop().run_in_executor(None, generate_content)
             return response.strip()
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[DEBUG] Gemini 실패: {error_msg}")
+            
+            # Gemini 실패시 Ollama 시도
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    test_response = await client.get("http://localhost:11434/api/tags")
+                    if test_response.status_code == 200:
+                        print("[DEBUG] Gemini 실패, Ollama API 호출 중...")
+                        return await self._call_ollama_api(prompt)
+            except Exception as ollama_e:
+                print(f"[DEBUG] Ollama도 실패: {str(ollama_e)}")
+                pass
             
         except Exception as e:
             error_msg = str(e)
