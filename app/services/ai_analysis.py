@@ -1,4 +1,4 @@
-import openai
+from openai import AsyncOpenAI
 import os
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
@@ -9,11 +9,13 @@ class AIAnalysisService:
     def __init__(self):
         self.api_key = os.getenv("OPENAI_API_KEY")
         if self.api_key:
-            openai.api_key = self.api_key
+            self.client = AsyncOpenAI(api_key=self.api_key)
+        else:
+            self.client = None
     
     async def analyze_match_performance(self, player_stats: Dict[str, Any], teammates_stats: List[Dict[str, Any]], match_info: Dict[str, Any]) -> Optional[str]:
         """매치 성과 분석"""
-        if not self.api_key:
+        if not self.client:
             return "AI 분석을 위한 API 키가 설정되지 않았습니다."
         
         try:
@@ -117,7 +119,7 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
     async def _call_openai_api(self, prompt: str) -> str:
         """OpenAI API 호출"""
         try:
-            response = openai.ChatCompletion.create(
+            response = await self.client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "당신은 PUBG 전문 게임 코치입니다. 플레이어의 성과를 분석하고 개선점을 제안하는 전문가입니다."},
@@ -134,7 +136,7 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
     
     async def analyze_player_trends(self, matches_data: List[Dict[str, Any]]) -> Optional[str]:
         """여러 매치의 트렌드 분석"""
-        if not self.api_key or not matches_data:
+        if not self.client or not matches_data:
             return None
         
         try:
