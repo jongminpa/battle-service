@@ -23,7 +23,8 @@ class AIAnalysisService:
         if gemini_key and GEMINI_AVAILABLE:
             print("[DEBUG] Configuring Gemini API")
             genai.configure(api_key=gemini_key)
-            self.model = genai.GenerativeModel('gemini-pro')
+            # 최신 Gemini 모델 사용
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
             self.use_gemini = True
             self.api_key = gemini_key
             print("[DEBUG] Successfully configured Gemini")
