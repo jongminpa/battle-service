@@ -293,6 +293,9 @@ class AIAnalysisService:
 {"- **사거리별 대응**: 최장거리 킬 " + f"{match_weapons.get('longest_kill', 0):.0f}m" + "를 통한 교전 거리 선호도 분석" if match_weapons and match_weapons.get('longest_kill', 0) > 0 else ""}
 - **타이밍 센스**: 킬 타이밍, 교전 선택, 회피 판단력 추론
 
+### 🎯 무기 추천 & 에임 개선 전략
+{self._generate_weapon_recommendations(weapon_mastery, match_weapons, player, match["game_mode"])}
+
 ### 5. 📈 {"팀플레이 개선점 & 액션 플랜" if not is_solo else "개인 실력 개선점 & 액션 플랜"}
 **즉시 개선 가능한 항목 (다음 게임부터):**
 {"- [ ] 팀원과의 커뮤니케이션 및 협력 개선사항" if not is_solo else "- [ ] 개인 생존 및 독립적 판단 개선사항"}
@@ -330,6 +333,166 @@ class AIAnalysisService:
 """
         
         return prompt
+    
+    def _generate_weapon_recommendations(self, weapon_mastery: Dict[str, Any], match_weapons: Dict[str, Any], player: Dict[str, Any], game_mode: str) -> str:
+        """무기 추천 및 에임 개선 전략 생성"""
+        if not weapon_mastery:
+            return """
+**무기 통계 데이터 부족으로 일반적인 추천만 제공합니다:**
+- 현재 플레이 스타일과 게임 모드에 맞는 무기 조합을 분석하여 추천해주세요
+- 에임 개선을 위한 구체적인 연습 방법을 제시해주세요
+"""
+        
+        # 무기 효율성 분석
+        best_weapons = []
+        weak_weapons = []
+        
+        for weapon_name, stats in weapon_mastery.items():
+            if stats['times_used'] < 10:  # 사용 횟수가 적으면 제외
+                continue
+                
+            # 효율성 지표 계산
+            kill_rate = stats['kills'] / max(stats['times_used'], 1)
+            damage_efficiency = stats['avg_damage_per_use']
+            headshot_rate = stats['headshots'] / max(stats['kills'], 1) if stats['kills'] > 0 else 0
+            
+            weapon_score = kill_rate * 100 + damage_efficiency * 0.1 + headshot_rate * 50
+            
+            if weapon_score > 30:  # 임계값은 조정 가능
+                best_weapons.append((weapon_name, stats, weapon_score))
+            elif weapon_score < 15:
+                weak_weapons.append((weapon_name, stats, weapon_score))
+        
+        # 정렬
+        best_weapons.sort(key=lambda x: x[2], reverse=True)
+        weak_weapons.sort(key=lambda x: x[2])
+        
+        recommendations = """
+**📊 개인 무기 효율성 분석 기반 추천:**
+
+**🔥 주력 무기 (계속 사용 추천):**"""
+        
+        for weapon_name, stats, score in best_weapons[:3]:
+            kill_rate = stats['kills'] / max(stats['times_used'], 1)
+            headshot_rate = (stats['headshots'] / max(stats['kills'], 1)) * 100 if stats['kills'] > 0 else 0
+            recommendations += f"""
+- **{weapon_name}**: 효율성 {score:.1f}점
+  - 킬 효율: {kill_rate:.2f}킬/사용, 헤드샷: {headshot_rate:.1f}%
+  - 에임 개선: {self._get_weapon_aim_guide(weapon_name, headshot_rate, stats)}"""
+        
+        if weak_weapons:
+            recommendations += """
+
+**⚠️ 개선 필요 무기 (연습 또는 교체 고려):**"""
+            for weapon_name, stats, score in weak_weapons[:2]:
+                kill_rate = stats['kills'] / max(stats['times_used'], 1)
+                recommendations += f"""
+- **{weapon_name}**: 효율성 {score:.1f}점 (낮음)
+  - 킬 효율: {kill_rate:.2f}킬/사용 - 개선 필요
+  - 개선 방안: {self._get_weapon_improvement_guide(weapon_name, stats)}"""
+        
+        # 게임 모드별 추천
+        mode_recommendations = self._get_mode_specific_weapon_recommendations(game_mode, best_weapons)
+        recommendations += f"""
+
+**🎮 {game_mode} 모드 특화 무기 조합:**
+{mode_recommendations}
+
+**🎯 종합 에임 트레이닝 플랜:**
+{self._get_comprehensive_aim_training(best_weapons, match_weapons)}"""
+        
+        return recommendations
+    
+    def _get_weapon_aim_guide(self, weapon_name: str, headshot_rate: float, stats: Dict[str, Any]) -> str:
+        """무기별 에임 개선 가이드"""
+        weapon_lower = weapon_name.lower()
+        
+        if headshot_rate >= 40:
+            return f"현재 헤드샷 비율이 우수합니다. 장거리 정확도 향상에 집중하세요"
+        elif headshot_rate >= 20:
+            return f"적정 수준입니다. 반동 제어 연습으로 연사 정확도를 높이세요"
+        else:
+            base_guide = f"헤드샷 비율이 낮습니다. 단발 사격 연습이 필요합니다"
+            
+        # 무기 타입별 구체적 가이드
+        if any(ar in weapon_lower for ar in ['m416', 'm16a4', 'scar', 'ak']):
+            return f"{base_guide}. 훈련장에서 100m 타겟 단발 연습 10분/일"
+        elif any(sr in weapon_lower for sr in ['kar98k', 'awm', 'm24']):
+            return f"{base_guide}. 다양한 거리에서 이동 타겟 연습 필요"
+        elif any(smg in weapon_lower for smin ['ump', 'vector', 'uzi']):
+            return f"{base_guide}. 근거리 추적 조준 연습 집중"
+        else:
+            return base_guide
+    
+    def _get_weapon_improvement_guide(self, weapon_name: str, stats: Dict[str, Any]) -> str:
+        """효율성이 낮은 무기의 개선 방안"""
+        kill_rate = stats['kills'] / max(stats['times_used'], 1)
+        
+        if kill_rate < 0.1:
+            return f"다른 무기로 교체 고려. 현재 킬 효율이 매우 낮습니다"
+        elif kill_rate < 0.2:
+            return f"기초 조준 연습 필요. 정지 상태에서 조준점 맞추기부터 시작"
+        else:
+            return f"반동 패턴 숙지 및 연사 제어 연습 집중"
+    
+    def _get_mode_specific_weapon_recommendations(self, game_mode: str, best_weapons: list) -> str:
+        """게임 모드별 무기 조합 추천"""
+        mode_lower = game_mode.lower()
+        
+        if "solo" in mode_lower:
+            return """
+- **권장 조합**: AR(주무기) + SR/DMR(부무기)
+- **이유**: 다양한 교전 거리 대응 + 즉석 치료 시간 확보
+- **우선순위**: 안정성 > 화력 (생존이 최우선)
+"""
+        elif "duo" in mode_lower:
+            return """
+- **권장 조합**: AR + SMG/SR (역할 분담)
+- **파트너 조합**: 한 명은 원거리(SR), 한 명은 근거리(AR/SMG)
+- **우선순위**: 시너지 > 개인 화력
+"""
+        else:  # squad
+            return """
+- **권장 조합**: 팀 내 역할별 무기 특화
+- **IGL**: AR(안정적 중거리), 서포터: LMG/AR, 저격수: SR, 어썰터: SMG/AR
+- **우선순위**: 팀 밸런스 > 개인 선호도
+"""
+    
+    def _get_comprehensive_aim_training(self, best_weapons: list, match_weapons: Dict[str, Any]) -> str:
+        """종합 에임 트레이닝 계획"""
+        if not best_weapons:
+            return """
+**기본 에임 트레이닝 플랜:**
+1. 훈련장 15분: 정지 타겟 단발 연습
+2. 아케이드 모드 10분: 빠른 반응속도 훈련
+3. 실전 게임에서 단발 사격 의식적 연습
+"""
+        
+        primary_weapon = best_weapons[0][0] if best_weapons else "AR"
+        headshot_rate = match_weapons.get('headshot_rate', 0)
+        
+        training_plan = f"""
+**맞춤형 에임 트레이닝 플랜 ({primary_weapon} 중심):**
+
+**Week 1-2 (기초 정확도):**
+- 훈련장 {primary_weapon} 단발: 50m/100m/200m 각 5분
+- 목표: 정확도 80% 이상 달성
+
+**Week 3-4 (반동 제어):**
+- {primary_weapon} 연사 제어: 벽면 스프레이 패턴 연습
+- 다양한 배율 스코프 적응 연습
+
+**실전 적용:**
+- 게임 내에서 단발→점사→연사 단계적 사격
+- 헤드샷 의식적 조준 (현재 {headshot_rate:.1f}% → 목표 30%+)
+"""
+        
+        if match_weapons.get('longest_kill', 0) > 300:
+            training_plan += "\n- 장거리 특화: 바람 보정 및 리드샷 연습 추가"
+        elif match_weapons.get('longest_kill', 0) < 100:
+            training_plan += "\n- 근거리 특화: 빠른 조준 및 추적 사격 연습 강화"
+        
+        return training_plan
     
     async def _call_ollama_api(self, prompt: str) -> str:
         """Ollama 로컬 AI 호출"""
