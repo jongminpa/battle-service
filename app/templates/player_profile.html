@@ -63,15 +63,36 @@
             background: #fff3cd; 
             border-radius: 6px; 
             border-left: 4px solid #f39c12;
+            position: relative;
         }
         .ai-analysis-result h4 { 
             margin: 0 0 10px 0; 
             color: #856404; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .ai-analysis-result .analysis-content { 
             white-space: pre-line; 
             line-height: 1.5; 
             color: #856404;
+        }
+        .close-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .close-btn:hover {
+            background: #c82333;
         }
         .loading { opacity: 0.7; pointer-events: none; }
         .trend-analysis-btn { 
@@ -97,7 +118,10 @@
         }
         .trend-analysis-result h3 { 
             margin: 0 0 15px 0; 
-            color: #6c3483; 
+            color: #6c3483;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .trend-analysis-result .trend-content { 
             white-space: pre-line; 
@@ -145,7 +169,10 @@
             </button>
             
             <div class="trend-analysis-result" id="trend-analysis-result">
-                <h3>🎯 종합 성과 분석 및 개선 조언</h3>
+                <h3>
+                    🎯 종합 성과 분석 및 개선 조언
+                    <button class="close-btn" onclick="closeTrendAnalysis()" title="닫기">×</button>
+                </h3>
                 <div class="trend-content"></div>
             </div>
             {% for match in detailed_matches %}
@@ -196,7 +223,10 @@
                 </div>
                 
                 <div class="ai-analysis-result" id="analysis-{{ match_data.id }}">
-                    <h4>🤖 AI 매치 분석1</h4>
+                    <h4>
+                        🤖 AI 매치 분석
+                        <button class="close-btn" onclick="closeAnalysis('analysis-{{ match_data.id }}', this)" title="닫기">×</button>
+                    </h4>
                     <div class="analysis-content"></div>
                 </div>
             </div>
@@ -342,6 +372,31 @@
                 button.disabled = false;
             } finally {
                 button.classList.remove('loading');
+            }
+        }
+        
+        function closeAnalysis(analysisId, closeButton) {
+            const analysisDiv = document.getElementById(analysisId);
+            analysisDiv.style.display = 'none';
+            
+            // AI 분석 버튼 다시 활성화
+            const matchItem = analysisDiv.closest('.match-item');
+            const aiButton = matchItem.querySelector('.ai-analysis-btn');
+            if (aiButton && aiButton.textContent === '분석 완료') {
+                aiButton.textContent = 'AI 분석';
+                aiButton.disabled = false;
+            }
+        }
+        
+        function closeTrendAnalysis() {
+            const trendDiv = document.getElementById('trend-analysis-result');
+            trendDiv.style.display = 'none';
+            
+            // 트렌드 분석 버튼 다시 활성화
+            const trendButton = document.querySelector('.trend-analysis-btn');
+            if (trendButton && trendButton.textContent === '✅ 분석 완료') {
+                trendButton.textContent = '📊 최근 20경기 전체 분석 및 개선 조언';
+                trendButton.disabled = false;
             }
         }
     </script>

@@ -127,6 +127,13 @@ async def analyze_match(match_id: str, player_id: str, platform: str = "steam"):
             and p["attributes"]["stats"]["playerId"] != player_stats["playerId"]
         ]
         
+        # 플레이어 무기별 통계 가져오기
+        print(f"[API DEBUG] 무기별 통계 가져오는 중...")
+        weapon_stats = await pubg_service.get_weapon_stats(player_id, platform)
+        
+        # 매치별 무기 사용 데이터 추출
+        match_weapon_data = pubg_service.extract_match_weapons_data(match_details, player_id)
+        
         # AI 분석 실행 - 매번 새로운 인스턴스 생성
         print(f"[API DEBUG] AI 서비스 인스턴스 생성 중...")
         ai_service = AIAnalysisService()
@@ -134,7 +141,9 @@ async def analyze_match(match_id: str, player_id: str, platform: str = "steam"):
         analysis = await ai_service.analyze_match_performance(
             player_stats=player_stats,
             teammates_stats=teammates,
-            match_info=match_data["attributes"]
+            match_info=match_data["attributes"],
+            weapon_stats=weapon_stats,
+            match_weapon_data=match_weapon_data
         )
         print(f"[API DEBUG] AI 분석 완료: {len(analysis) if analysis else 0} 글자")
         
