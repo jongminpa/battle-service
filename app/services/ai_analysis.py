@@ -177,7 +177,7 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
             response = await client.post(
                 "http://localhost:11434/api/generate",
                 json={
-                    "model": "tinyllama",
+                    "model": "qwen2:0.5b",
                     "prompt": prompt,
                     "stream": False
                 }
