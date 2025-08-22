@@ -120,51 +120,123 @@ class AIAnalysisService:
         teammates = data["teammates"]
         match = data["match"]
         
+        # 성과 지표 계산
+        kill_efficiency = player["kills"] / max(player["survival_time"] / 60, 1) if player["survival_time"] > 0 else 0
+        damage_per_kill = player["damage"] / max(player["kills"], 1) if player["kills"] > 0 else player["damage"]
+        headshot_rate = (player["headshots"] / max(player["kills"], 1)) * 100 if player["kills"] > 0 else 0
+        team_total_kills = sum(t["kills"] for t in teammates) + player["kills"]
+        kill_contribution = (player["kills"] / max(team_total_kills, 1)) * 100 if team_total_kills > 0 else 0
+        
         prompt = f"""
-PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
+당신은 PUBG 전문 게임 코치이자 프로 선수 멘토입니다. 아래 데이터를 바탕으로 매치를 심층 분석하고, 플레이어의 실력 향상을 위한 구체적이고 실행 가능한 조언을 제공해주세요.
 
-## 매치 정보
-- 게임 모드: {match["game_mode"]}
-- 맵: {match["map_name"]}
-- 최종 순위: {player["rank"]}위
+## 📊 매치 기본 정보
+- **게임 모드**: {match["game_mode"]} 
+- **맵**: {match["map_name"]}
+- **최종 순위**: {player["rank"]}위 / 100명
+- **생존 시간**: {player["survival_time"]:.1f}분
 
-## 플레이어 성과
-- 킬 수: {player["kills"]}
-- 총 데미지: {player["damage"]:.1f}
-- 생존 시간: {player["survival_time"]:.1f}분
-- 헤드샷: {player["headshots"]}
-- 기절시킨 횟수: {player["dbnos"]}
-- 팀원 부활: {player["revives"]}회
-- 어시스트: {player["assists"]}
-- 이동 거리: {player["ride_distance"]:.1f}km (차량) + {player["walk_distance"]:.1f}km (도보)
-- 무기 획득: {player["weapons_acquired"]}개
-- 부스터 사용: {player["boosts"]}개
-- 치료 아이템 사용: {player["heals"]}개
+## 🎯 플레이어 상세 성과 데이터
+### 전투 통계
+- **킬 수**: {player["kills"]}킬 (팀 기여도: {kill_contribution:.1f}%)
+- **총 데미지**: {player["damage"]:.0f} (킬당 평균: {damage_per_kill:.0f})
+- **헤드샷**: {player["headshots"]}개 (정확도: {headshot_rate:.1f}%)
+- **기절시킨 횟수**: {player["dbnos"]}명 (확정킬 전환율: {(player["kills"]/max(player["dbnos"], 1)*100):.1f}%)
+- **어시스트**: {player["assists"]}회
 
-## 팀원 성과
-"""
+### 생존 및 이동
+- **킬 효율성**: {kill_efficiency:.2f}킬/분
+- **이동 거리**: 차량 {player["ride_distance"]:.1f}km + 도보 {player["walk_distance"]:.1f}km (총 {player["ride_distance"] + player["walk_distance"]:.1f}km)
+- **무기 획득**: {player["weapons_acquired"]}개
+
+### 팀워크 및 지원
+- **팀원 부활**: {player["revives"]}회
+- **팀킬**: {player["team_kills"]}회 {"⚠️ 주의필요" if player["team_kills"] > 0 else "✅ 양호"}
+
+### 아이템 관리
+- **부스터 사용**: {player["boosts"]}개
+- **치료 아이템**: {player["heals"]}개
+
+## 👥 팀원 성과 비교"""
         
-        for i, teammate in enumerate(teammates, 1):
-            prompt += f"""
-팀원 {i} ({teammate["name"]}):
-- 킬: {teammate["kills"]}, 데미지: {teammate["damage"]:.1f}
-- 생존시간: {teammate["survival_time"]:.1f}분, 헤드샷: {teammate["headshots"]}
-- 기절시킨 횟수: {teammate["dbnos"]}, 부활: {teammate["revives"]}회, 어시스트: {teammate["assists"]}
+        if teammates:
+            for i, teammate in enumerate(teammates, 1):
+                teammate_damage_per_kill = teammate["damage"] / max(teammate["kills"], 1) if teammate["kills"] > 0 else teammate["damage"]
+                teammate_headshot_rate = (teammate["headshots"] / max(teammate["kills"], 1)) * 100 if teammate["kills"] > 0 else 0
+                
+                prompt += f"""
+**팀원 {i}** ({teammate["name"]}):
+- 킬/데미지: {teammate["kills"]}킬, {teammate["damage"]:.0f}데미지 (킬당: {teammate_damage_per_kill:.0f})
+- 생존시간: {teammate["survival_time"]:.1f}분, 헤드샷: {teammate["headshots"]}개 ({teammate_headshot_rate:.1f}%)
+- 기절/부활/어시스트: {teammate["dbnos"]}/{teammate["revives"]}/{teammate["assists"]}
 """
+        else:
+            prompt += "\n**솔로 플레이** - 팀원 데이터 없음"
         
-        prompt += """
+        prompt += f"""
 
-## 분석 요청
-다음 관점에서 상세히 분석해주세요:
+## 🎮 전문가 분석 요청
 
-1. **전투 성과 분석**: 킜/데미지 효율성, 헤드샷 정확도, 기절 vs 확정킬 비율
-2. **팀워크 분석**: 부활 횟수, 어시스트 기여도, 팀원들과의 협력 수준
-3. **생존 전략 분석**: 이동 패턴, 생존 시간 대비 성과, 아이템 활용도
-4. **전술적 분석**: 교전 스타일, 포지셔닝, 상황 판단력
-5. **개선점 제안**: 구체적이고 실행 가능한 개선 방안
-6. **종합 평가**: 이번 매치의 총평 및 등급 (S, A, B, C, D)
+당신의 전문적인 게이밍 경험을 바탕으로 다음 영역을 **구체적인 수치와 예시**를 들어 분석해주세요:
 
-한국어로 친근하고 구체적인 조언을 제공해주세요. 각 섹션을 명확히 구분하여 작성해주세요.
+### 1. 🔥 전투 퍼포먼스 심층 분석
+- **킬 효율성 평가**: {kill_efficiency:.2f}킬/분은 이 게임모드/맵에서 어떤 수준인가?
+- **데미지 효율성**: 킬당 {damage_per_kill:.0f} 데미지는 적절한가? (일반적으로 200-300이 이상적)
+- **헤드샷 정확도**: {headshot_rate:.1f}%의 헤드샷 비율에 대한 평가와 개선 방안
+- **확정킬 능력**: 기절 {player["dbnos"]}명 중 킬 {player["kills"]}개 전환 - 마무리 능력 분석
+- **교전 스타일 추론**: 통계로 보는 플레이어의 교전 패턴 (적극적/수비적/저격형 등)
+
+### 2. 🤝 팀워크 & 협업 능력 분석
+- **팀 기여도**: 전체 팀 킬 중 {kill_contribution:.1f}% 기여 - 캐리/서포트 역할 평가
+- **지원 능력**: {player["revives"]}회 부활, {player["assists"]}회 어시스트의 의미
+- **팀 시너지**: 팀원들과의 성과 비교를 통한 협력 수준 평가
+- **리더십 분석**: 통계로 보는 팀 내 역할과 책임감
+
+### 3. 🗺️ 전략적 플레이 & 맵 활용도
+- **포지셔닝 능력**: {player["rank"]}위 달성까지의 생존 전략 분석
+- **이동 패턴 분석**: 총 {player["ride_distance"] + player["walk_distance"]:.1f}km 이동의 효율성 (차량 {player["ride_distance"]:.1f}km vs 도보 {player["walk_distance"]:.1f}km 비율)
+- **존 관리**: 생존 시간 {player["survival_time"]:.1f}분과 최종 순위의 상관관계
+- **맵별 특성**: {match["map_name"]} 맵에서의 플레이 스타일 적합성
+
+### 4. ⚡ 자원 관리 & 게임 센스
+- **아이템 활용도**: 부스터 {player["boosts"]}개, 치료템 {player["heals"]}개 사용의 적절성
+- **무기 선택**: {player["weapons_acquired"]}개 무기 획득 - 장비 교체 빈도 분석
+- **타이밍 센스**: 킬 타이밍, 교전 선택, 회피 판단력 추론
+- **경제 관리**: 인벤토리 및 자원 활용 효율성
+
+### 5. 📈 개선점 & 구체적 액션 플랜
+**즉시 개선 가능한 항목 (다음 게임부터):**
+- [ ] 구체적인 개선사항 1 (예: 헤드샷 연습을 위한 구체적 방법)
+- [ ] 구체적인 개선사항 2 (예: 특정 상황에서의 판단 기준)
+- [ ] 구체적인 개선사항 3
+
+**단기 목표 (1-2주):**
+- 수치적 목표 제시 (예: 헤드샷 비율 30% 달성, 킬/분 0.5 달성 등)
+
+**중장기 발전 방향 (1개월+):**
+- 플레이 스타일 개선 방향성
+
+### 6. 🏆 종합 평가 & 등급
+**이번 매치 종합 점수**: S/A/B/C/D 등급 (근거와 함께)
+**강점 TOP 3**: 
+1. 
+2. 
+3. 
+
+**우선 개선 영역 TOP 3**:
+1. 
+2. 
+3. 
+
+**다음 매치 목표**: 구체적이고 측정 가능한 목표 제시
+
+---
+💡 **작성 가이드라인**:
+- 모든 분석은 제공된 실제 수치를 근거로 작성
+- 일반론보다는 이 플레이어만의 특성에 맞춘 개인화된 조언
+- 실행 가능한 구체적 방법론 제시 (예: "에임 연습"이 아닌 "훈련장에서 매일 10분간 M416 단발 헤드샷 연습")
+- 격려와 동기부여가 되는 긍정적 톤 유지
+- 각 섹션을 명확히 구분하고 이모지로 가독성 향상
 """
         
         return prompt
