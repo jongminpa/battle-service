@@ -90,6 +90,7 @@ async def player_profile(request: Request, player_name: str):
         })
 
 @router.post("/api/match/{match_id}/analyze")
+@router.get("/api/match/{match_id}/analyze")
 async def analyze_match(match_id: str, player_id: str, platform: str = "steam"):
     """매치 AI 분석 API"""
     print(f"[API DEBUG] AI 분석 요청 받음 - Match ID: {match_id}, Player ID: {player_id}")
@@ -193,3 +194,8 @@ async def get_trend_analysis(player_id: str, platform: str = "steam"):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"트렌드 분석 중 오류가 발생했습니다: {str(e)}")
+
+@router.get("/api/test")
+async def test_endpoint():
+    print("[TEST] 테스트 엔드포인트 호출됨!")
+    return {"message": "테스트 성공!"}

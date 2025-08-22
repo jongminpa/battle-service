@@ -10,6 +10,13 @@ load_dotenv()
 
 app = FastAPI(title="PUBG Battle Analytics", version="1.0.0")
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"[MIDDLEWARE] {request.method} {request.url}")
+    response = await call_next(request)
+    print(f"[MIDDLEWARE] Response: {response.status_code}")
+    return response
+
 # Static files and templates
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
