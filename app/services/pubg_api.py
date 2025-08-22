@@ -60,7 +60,7 @@ class PUBGAPIService:
                 data = response.json()
                 matches = data.get("data", {}).get("relationships", {}).get("matches", {}).get("data", [])
                 
-                return matches[:10]  # 최근 10경기
+                return matches[:20]  # 최근 20경기
                 
             except Exception as e:
                 print(f"최근 매치 조회 오류: {e}")

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>플레이어 프로필 - PUBG Battle Analytics</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .player-info { background: #3498db; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .stat-card { background: #ecf0f1; padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #2c3e50; }
+        .stat-label { color: #7f8c8d; font-size: 14px; }
+        .matches { margin-top: 30px; }
+        .match-item { background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #3498db; }
+        .back-link { margin-top: 20px; }
+        .back-link a { color: #3498db; text-decoration: none; }
+        .team-toggle { 
+            background: #3498db; 
+            color: white; 
+            border: none; 
+            padding: 5px 10px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 12px; 
+            margin-top: 10px;
+        }
+        .team-toggle:hover { background: #2980b9; }
+        .team-members { 
+            display: none; 
+            margin-top: 15px; 
+            padding: 10px; 
+            background: #f8f9fa; 
+            border-radius: 6px; 
+            border-left: 3px solid #3498db;
+        }
+        .team-member { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); 
+            gap: 8px; 
+            margin-bottom: 10px; 
+            padding: 8px; 
+            background: white; 
+            border-radius: 4px; 
+        }
+        .team-member:last-child { margin-bottom: 0; }
+        .ai-analysis-btn { 
+            background: #e74c3c; 
+            color: white; 
+            border: none; 
+            padding: 5px 10px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 12px; 
+            margin-left: 10px;
+        }
+        .ai-analysis-btn:hover { background: #c0392b; }
+        .ai-analysis-result { 
+            display: none; 
+            margin-top: 15px; 
+            padding: 15px; 
+            background: #fff3cd; 
+            border-radius: 6px; 
+            border-left: 4px solid #f39c12;
+        }
+        .ai-analysis-result h4 { 
+            margin: 0 0 10px 0; 
+            color: #856404; 
+        }
+        .ai-analysis-result .analysis-content { 
+            white-space: pre-line; 
+            line-height: 1.5; 
+            color: #856404;
+        }
+        .loading { opacity: 0.7; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if player %}
+        <div class="player-info">
+            <h1>{{ player.attributes.name }}</h1>
+        </div>
+
+        {% if stats %}
+        <h2>통계</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.data.attributes.gameModeStats.solo.kills if stats.data.attributes.gameModeStats.solo else 'N/A' }}</div>
+                <div class="stat-label">Solo 킬</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.data.attributes.gameModeStats.solo.wins if stats.data.attributes.gameModeStats.solo else 'N/A' }}</div>
+                <div class="stat-label">Solo 승리</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.data.attributes.gameModeStats.duo.kills if stats.data.attributes.gameModeStats.duo else 'N/A' }}</div>
+                <div class="stat-label">Duo 킬</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ stats.data.attributes.gameModeStats.duo.wins if stats.data.attributes.gameModeStats.duo else 'N/A' }}</div>
+                <div class="stat-label">Duo 승리</div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if detailed_matches %}
+        <div class="matches">
+            <h2>최근 매치 상세</h2>
+            {% for match in detailed_matches %}
+            {% set match_data = match.data %}
+            {% set participants = match.included | selectattr('type', 'equalto', 'participant') | list %}
+            {% set rosters = match.included | selectattr('type', 'equalto', 'roster') | list %}
+            {% set player_participant = participants | selectattr('attributes.stats.playerId', 'equalto', player.id) | first %}
+            
+            {% if player_participant %}
+            {# winPlace와 teamRank를 기준으로 팀원 찾기 #}
+            {% set actual_teammates = participants | selectattr('attributes.stats.winPlace', 'equalto', player_participant.attributes.stats.winPlace) | rejectattr('attributes.stats.playerId', 'equalto', player.id) | list %}
+            <div class="match-item">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 15px;">
+                    <div><strong>게임모드:</strong> {{ get_korean_game_mode(match_data.attributes.gameMode) }}</div>
+                    <div><strong>맵:</strong> {{ get_korean_map_name(match_data.attributes.mapName) }}</div>
+                    <div><strong>순위:</strong> 
+                        <span style="color: {{ get_rank_color(player_participant.attributes.stats.winPlace) }}; font-weight: bold;">
+                            {{ player_participant.attributes.stats.winPlace }}위
+                        </span>
+                    </div>
+                    <div><strong>킬:</strong> {{ player_participant.attributes.stats.kills }}</div>
+                    <div><strong>데미지:</strong> {{ "%.1f"|format(player_participant.attributes.stats.damageDealt) }}</div>
+                    <div><strong>생존시간:</strong> {{ "%.1f"|format(player_participant.attributes.stats.timeSurvived / 60) }}분</div>
+                    <div><strong>이동거리:</strong> {{ "%.1f"|format(player_participant.attributes.stats.rideDistance / 1000) }}km</div>
+                    <div><strong>헤드샷:</strong> {{ player_participant.attributes.stats.headshotKills }}</div>
+                </div>
+                
+                {% if match_data.attributes.gameMode in ['duo', 'duo-fpp', 'squad', 'squad-fpp'] and actual_teammates and actual_teammates|length > 0 %}
+                <button class="team-toggle" onclick="toggleTeamMembers(this)">팀원 보기 ({{ actual_teammates|length }}명)</button>
+                
+                <div class="team-members">
+                    <h4 style="margin: 0 0 10px 0; color: #2c3e50;">팀원 정보</h4>
+                    {% for member in actual_teammates %}
+                        <div class="team-member">
+                            <div><strong>이름:</strong> {{ member.attributes.stats.name }}</div>
+                            <div><strong>킬:</strong> {{ member.attributes.stats.kills }}</div>
+                            <div><strong>데미지:</strong> {{ "%.1f"|format(member.attributes.stats.damageDealt) }}</div>
+                            <div><strong>생존시간:</strong> {{ "%.1f"|format(member.attributes.stats.timeSurvived / 60) }}분</div>
+                            <div><strong>헤드샷:</strong> {{ member.attributes.stats.headshotKills }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endif %}
+                
+                <div style="font-size: 12px; color: #666; display: flex; justify-content: space-between; align-items: center;">
+                    <span>날짜: {{ match_data.attributes.createdAt[:10] }}</span>
+                    <button class="ai-analysis-btn" onclick="analyzeMatch('{{ match_data.id }}', '{{ player.id }}', this)">AI 분석</button>
+                </div>
+                
+                <div class="ai-analysis-result" id="analysis-{{ match_data.id }}">
+                    <h4>🤖 AI 매치 분석</h4>
+                    <div class="analysis-content"></div>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% elif matches %}
+        <div class="matches">
+            <h2>최근 매치</h2>
+            {% for match in matches %}
+            <div class="match-item">
+                <strong>타입:</strong> {{ match.type }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <h1>플레이어를 찾을 수 없습니다</h1>
+        <p>요청한 플레이어 정보를 찾을 수 없습니다.</p>
+        {% endif %}
+
+        <div class="back-link">
+            <a href="/">메인으로 돌아가기</a>
+        </div>
+    </div>
+
+    <script>
+        function toggleTeamMembers(button) {
+            const teamMembers = button.nextElementSibling;
+            const isVisible = teamMembers.style.display === 'block';
+            
+            if (isVisible) {
+                teamMembers.style.display = 'none';
+                button.textContent = button.textContent.replace('숨기기', '보기');
+            } else {
+                teamMembers.style.display = 'block';
+                button.textContent = button.textContent.replace('보기', '숨기기');
+            }
+        }
+        
+        async function analyzeMatch(matchId, playerId, button) {
+            const analysisDiv = document.getElementById(`analysis-${matchId}`);
+            const contentDiv = analysisDiv.querySelector('.analysis-content');
+            
+            // 로딩 상태 표시
+            button.textContent = '분석 중...';
+            button.classList.add('loading');
+            
+            try {
+                const response = await fetch(`/api/match/${matchId}/analyze?player_id=${playerId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('분석 요청 실패');
+                }
+                
+                const data = await response.json();
+                
+                // 분석 결과 표시
+                contentDiv.textContent = data.analysis;
+                analysisDiv.style.display = 'block';
+                
+                // 버튼 텍스트 변경
+                button.textContent = '분석 완료';
+                button.disabled = true;
+                
+            } catch (error) {
+                console.error('AI 분석 오류:', error);
+                contentDiv.textContent = '분석 중 오류가 발생했습니다. 다시 시도해주세요.';
+                analysisDiv.style.display = 'block';
+                
+                // 버튼 복원
+                button.textContent = 'AI 분석';
+            } finally {
+                button.classList.remove('loading');
+            }
+        }
+    </script>
+</body>
+</html>
