@@ -1,4 +1,4 @@
-from openai import AsyncOpenAI
+import google.generativeai as genai
 import os
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
@@ -7,15 +7,24 @@ load_dotenv()
 
 class AIAnalysisService:
     def __init__(self):
-        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")
         if self.api_key:
-            self.client = AsyncOpenAI(api_key=self.api_key)
+            if os.getenv("GEMINI_API_KEY"):
+                genai.configure(api_key=self.api_key)
+                self.model = genai.GenerativeModel('gemini-pro')
+                self.use_gemini = True
+            else:
+                from openai import AsyncOpenAI
+                self.client = AsyncOpenAI(api_key=self.api_key)
+                self.use_gemini = False
         else:
+            self.model = None
             self.client = None
+            self.use_gemini = False
     
     async def analyze_match_performance(self, player_stats: Dict[str, Any], teammates_stats: List[Dict[str, Any]], match_info: Dict[str, Any]) -> Optional[str]:
         """매치 성과 분석"""
-        if not self.client:
+        if not self.api_key:
             return "AI 분석을 위한 API 키가 설정되지 않았습니다."
         
         try:
@@ -25,8 +34,11 @@ class AIAnalysisService:
             # AI 프롬프트 생성
             prompt = self._create_analysis_prompt(analysis_data)
             
-            # OpenAI API 호출
-            response = await self._call_openai_api(prompt)
+            # AI API 호출
+            if self.use_gemini:
+                response = await self._call_gemini_api(prompt)
+            else:
+                response = await self._call_openai_api(prompt)
             
             return response
             
@@ -116,6 +128,23 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
         
         return prompt
     
+    async def _call_gemini_api(self, prompt: str) -> str:
+        """Gemini API 호출"""
+        try:
+            # Gemini는 동기식 API이므로 비동기 래퍼 사용
+            import asyncio
+            
+            def generate_content():
+                response = self.model.generate_content(prompt)
+                return response.text
+            
+            # 동기 함수를 비동기로 실행
+            response = await asyncio.get_event_loop().run_in_executor(None, generate_content)
+            return response.strip()
+            
+        except Exception as e:
+            return f"Gemini API 호출 실패: {str(e)}"
+    
     async def _call_openai_api(self, prompt: str) -> str:
         """OpenAI API 호출"""
         try:
@@ -136,7 +165,7 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
     
     async def analyze_player_trends(self, matches_data: List[Dict[str, Any]]) -> Optional[str]:
         """여러 매치의 트렌드 분석"""
-        if not self.client or not matches_data:
+        if not self.api_key or not matches_data:
             return None
         
         try:
@@ -147,7 +176,10 @@ PUBG 배틀로얄 게임 매치 분석을 수행해주세요.
             prompt = self._create_trend_analysis_prompt(trend_data)
             
             # AI 분석 실행
-            response = await self._call_openai_api(prompt)
+            if self.use_gemini:
+                response = await self._call_gemini_api(prompt)
+            else:
+                response = await self._call_openai_api(prompt)
             
             return response
             
